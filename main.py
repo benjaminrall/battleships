@@ -48,16 +48,31 @@ class Ship:
         end = (root[0] + size[0], root[1] + size[1])
         return (root, end)
 
-    def get_positions(self):
-        return None
+    def get_positions(self, root = None):
+        if root is None:
+            root = self.root
+        size = Ship.sizes[self.type][self.orientation]
+        length = max(size) + 1
+        index = 0 if size[0] > size[1] else 1
+        positions = []
+        for i in range(length):
+            tempPos = [root[0], root[1]]
+            tempPos[index] += i
+            positions.append(tuple(tempPos))
+        return positions
 
-    def overlaps(self, ships):
-        bounds = self.get_bounds()
-        print(bounds)
-        print(max(bounds[1]))
-        for i in range(max(Ship.sizes[self.type][self.orientation]) + 1):
-            print(i)
-        return False
+    def overlaps(self, ships, root = None):
+        positions = self.get_positions(root)
+        print(positions)
+        overlap = False
+        for ship in ships:
+            if self is not ship:
+                shipPositions = ship.get_positions()
+                for position in positions:
+                    if position in shipPositions:
+                        overlap = True
+                        break
+        return overlap
 
 class Tray:
     def __init__(self, x, y, w, h):
@@ -77,12 +92,6 @@ class Tray:
         return False
 
     def get_tray_index(self, pos):
-        # 30-70, 105-145, 180-220, 255-295, 330-370
-        # 0: x < 88
-        # 1: 88 <= x < 163
-        # 2: 163 <= x < 238
-        # 3: 238 <= x < 313
-        # 4: 313 <= x
         relX = pos[0] - self.pos[0]
         i = int((relX - 13) // 75)
         return max(min(i, 4), 0)
@@ -156,9 +165,9 @@ if __name__ == '__main__':
                     relX = mousePos[0] - gridPos[0]
                     relY = mousePos[1] - gridPos[1]
                     if 0 <= relX < GRID_SIZE and 0 <= relY < GRID_SIZE:
-                        newPos = (relX // SCALE, relY // SCALE)
+                        newPos = (int(relX // SCALE), int(relY // SCALE))
                         newBounds = heldShip.get_bounds(newPos)
-                        if 0 <= newBounds[1][0] < 10 and 0 <= newBounds[1][1] < 10 and not heldShip.overlaps(playerShips):
+                        if 0 <= newBounds[1][0] < 10 and 0 <= newBounds[1][1] < 10 and not heldShip.overlaps(playerShips, newPos):
                             heldShip.root = newPos
                             validDrop = True
                             if heldShip.inTray:
@@ -171,15 +180,15 @@ if __name__ == '__main__':
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_r and heldShip is not None:
                     heldShip.orientation = (heldShip.orientation + 1) % 2
-                        
-                    
+
+
         win.fill((50, 50, 50))
         opponentSurface.fill((100, 100, 100))
 
         tray.draw(cam, heldShip)
 
         #cam.blit(opponentSurface, (40, -265))
-    
+
         draw_player_board(cam, playerSurface, playerShips, heldShip)
-        
+
         pygame.display.update()
