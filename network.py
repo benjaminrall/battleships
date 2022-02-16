@@ -1,4 +1,4 @@
-import socket, time
+import socket
 
 class Network():
     def __init__(self, server):
@@ -14,9 +14,11 @@ class Network():
     def connect(self):
         try:
             self.client.connect(self.addr)
+            self.connected = True
             return self.client.recv(2048).decode()
         except socket.error as e:
-            pass
+            self.connected = False
+            return -1
 
     def send(self, data):
         try:

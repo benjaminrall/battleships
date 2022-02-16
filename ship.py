@@ -1,32 +1,48 @@
-import random
-import copy
-
 class Ship:
-    def __init__(self, n, board):
-        self.length = n
-        self.board = board
+
+    sizes = {
+        0:[(0, 3),(3, 0)],  # battleship
+        1:[(0, 4),(4, 0)],  # carrier
+        2:[(0, 2),(2, 0)],  # cruiser
+        3:[(0, 1),(1, 0)],  # destroyer
+        4:[(0, 2),(2, 0)]   # submarine
+    }
+
+    def __init__(self, t, pos=(-1, -1), inTray=True):
+        self.state = -1
+        self.root = pos
+        self.type = t
         self.orientation = 0
-        self.root = []
-        valid = False
-        while not valid:
-            self.randomise_position()
-            coords = self.calculate_coords()
-            valid = not False in [board.grid[coord[0]][coord[1]] == 0 for coord in coords]
-        self.bounds = self.calculate_bounds()
-        self.coords = coords
+        self.inTray = inTray
 
-    def randomise_position(self):
-        self.orientation = random.randint(0, 1)
-        self.root = [random.randint(0, 9 - self.length), random.randint(0, 9 - self.length)]
+    def get_bounds(self, root = None):
+        if root is None:
+            root = self.root
+        size = Ship.sizes[self.type][self.orientation]
+        end = (root[0] + size[0], root[1] + size[1])
+        return (root, end)
 
-    def calculate_bounds(self):
-        end = copy.copy(self.root)
-        end[self.orientation] += (self.length - 1)
-        return [(self.root[0], end[0]), (self.root[1], end[1])]
+    def get_positions(self, root = None):
+        if root is None:
+            root = self.root
+        size = Ship.sizes[self.type][self.orientation]
+        length = max(size) + 1
+        index = 0 if size[0] > size[1] else 1
+        positions = []
+        for i in range(length):
+            tempPos = [root[0], root[1]]
+            tempPos[index] += i
+            positions.append(tuple(tempPos))
+        return positions
 
-    def calculate_coords(self):
-        coords = [(self.root[0] + i if self.orientation == 0 else self.root[0], self.root[1] + i if self.orientation == 1 else self.root[1]) for i in range(self.length)]
-        return coords
-
-ship = Ship(5)
-print(ship.coords)
+    def overlaps(self, ships, root = None):
+        positions = self.get_positions(root)
+        overlap = False
+        for ship in ships:
+            if self is not ship:
+                shipPositions = ship.get_positions()
+                for position in positions:
+                    if position in shipPositions:
+                        overlap = True
+                        break
+        return overlap

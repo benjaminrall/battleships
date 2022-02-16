@@ -13,5 +13,3 @@ class Spritesheet:
         
     def __getitem__(self, i):
         return self.sprites[i]
-
-#s = Spritesheet("imgs/sprites/", 40)
