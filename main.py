@@ -3,6 +3,7 @@ import os
 from network import Network
 from ship import Ship
 from tray import Tray
+from game import Game
 from sprite_loader import Spritesheet
 from personallib.camera import Camera
 from personallib.canvas import *
@@ -14,6 +15,8 @@ FRAMERATE = 120
 GRID_SIZE = 400
 SCALE = GRID_SIZE // 10
 ICON_IMG = pygame.image.load(os.path.join("imgs", "icon.png"))
+DEFAULT_IP = "192.168.1.124"
+COLOURS = [None, (255, 0, 0), (200, 200, 200)]
 
 # Pygame Setup
 win = pygame.display.set_mode((WIN_WIDTH, WIN_HEIGHT))
@@ -33,29 +36,76 @@ running = True
 heldShip = None
 heldShipOrientation = 0
 playerShips = []
+enemyShips = []
 network = None
 playerID = None
 ready = False
 enemyReady = False
 playing = False
+game = None
+turn = -1
 
 # Methods
 def draw_board(surface):
+    surface.fill((0, 0, 60))
     for y in range(10):
         for x in range(10):
             pygame.draw.rect(surface, (0, 0, 200), (x * SCALE + 1, y * SCALE + 1, SCALE - 2, SCALE - 2))
 
-def draw_player_board(cam, surface, ships, heldShip):
-    surface.fill((0, 0, 60))
+def draw_hits(surface, board):
+    for y in range(10):
+        for x in range(10):
+            colour = COLOURS[board[y][x]]
+            if colour:
+                shift = SCALE // 2
+                pygame.draw.circle(surface, colour, ((x * SCALE) + shift, (y * SCALE) + shift), shift / 2)
+
+def draw_sunken_ships(surface, ships, board):
+    for ship in ships:
+        sunk = True
+        for position in ship.get_positions():
+            if board[position[1]][position[0]] == 0:
+                sunk = False
+        if sunk:
+            (start, end) = ship.get_bounds()
+            shift = SCALE // 2
+            pygame.draw.line(
+                surface, COLOURS[1], ((start[0] * SCALE) + shift, (start[1] * SCALE) + shift), 
+                ((end[0] * SCALE) + shift, (end[1] * SCALE) + shift), shift + (1 if shift % 2 == 0 else 0)
+            )
+
+def draw_player_board(cam, surface, ships, heldShip, board = None):
     draw_board(surface)
     for ship in ships:
         if ship != heldShip:
             surface.blit(sprites[(ship.type * 2) + ship.orientation], (ship.root[0] * SCALE, ship.root[1] * SCALE))
+    if board is not None:
+        draw_hits(surface, board)
+        draw_sunken_ships(surface, ships, board)
     cam.blit(surface, (-440, -265))
     if heldShip is not None:
         mousePos = cam.get_world_coord(pygame.mouse.get_pos())
         sprite = sprites[(heldShip.type * 2) + heldShip.orientation]
         cam.blit(sprite, (mousePos[0] - SCALE // 2, mousePos[1] - SCALE // 2))
+    
+
+def draw_opponent_board(cam, surface, pos, ships, board, showHover):
+    draw_board(surface)
+    draw_hits(surface, board)
+    if ships is not None and len(ships) > 0:
+        draw_sunken_ships(surface, ships, board)
+    cam.blit(surface, pos)
+    if showHover:
+        hoverSurface = pygame.Surface(surface.get_size())
+        hoverSurface.set_alpha(80)
+        mousePos = cam.get_world_coord(pygame.mouse.get_pos())
+        relX = mousePos[0] - pos[0]
+        relY = mousePos[1] - pos[1]
+        if 0 <= relX < GRID_SIZE and 0 <= relY < GRID_SIZE:
+            x = relX // SCALE
+            y = relY // SCALE
+            pygame.draw.rect(hoverSurface, (200, 200, 200), (x * SCALE + 1, y * SCALE + 1, SCALE - 2, SCALE - 2))
+        cam.blit(hoverSurface, pos)
 
 def connect():
     textBox = connectMenu.find_element("ipTextBox")
@@ -103,7 +153,7 @@ def readyButton():
 # Canvas
 connectMenu = Canvas(WIN_WIDTH, WIN_HEIGHT)
 connectMenu.add_element(Button("connectButton", (340, 500), (120, 50), Text("connectButtonText", (0, 0), "georgia", 24, "Connect"), (200, 200, 200), (150, 150, 150), (100, 100, 100), onClick=connect))
-connectMenu.add_element(TextBox("ipTextBox", (60, 500), (240, 50), Text("ipTextBoxText", (0, 0), "georgia", 24), "", (0, 0, 0), (250, 250, 250), "Enter IP...", (150, 150, 150), (0, 0, 0), 1, (230, 230, 230), (210, 210, 210), onEnter=connect))
+connectMenu.add_element(TextBox("ipTextBox", (60, 500), (240, 50), Text("ipTextBoxText", (0, 0), "georgia", 24), DEFAULT_IP, (0, 0, 0), (250, 250, 250), "Enter IP...", (150, 150, 150), (0, 0, 0), 1, (230, 230, 230), (210, 210, 210), onEnter=connect))
 connectMenu.add_element(Text("connectionErrorMessage", (60, 555), "georgia", 14, "", (255, 0, 0)))
 connectMenu.set_visible(False)
 
@@ -216,6 +266,10 @@ if __name__ == '__main__':
                 else:
                     waitingMenu.set_visible(False)
                     lobbyMenu.set_visible(True)
+
+                    draw_board(opponentSurface)
+                    cam.blit(opponentSurface, (40, -265))
+
                     if playerData[1] == "False":
                         if enemyReady:
                             lobbyMenu.find_element(f"ready{(playerID + 1) % 2}").set_path("imgs/not_ready.png")
@@ -225,15 +279,47 @@ if __name__ == '__main__':
                             lobbyMenu.find_element(f"ready{(playerID + 1) % 2}").set_path("imgs/ready.png")
                             enemyReady = True
                 if ready and enemyReady or playerData[2] == "True":
+                    if playerID == 0:
+                        network.send("start")
                     lobbyMenu.set_visible(False)
                     playing = True
+                    game = network.send("get:game")
+                    while game == "None":
+                        game = network.send("get:game")
+                    game = Game(game)
+                    turn = int(network.send("get:turn"))
+                    if playerData[2] == "True" and not (ready and enemyReady):
+                        print("Getting ships.")
+                        (playerShips, enemyShips) = network.pickle_receive("get:ships")
+                    else:
+                        network.send("pickle")
+                        network.pickle_send(playerShips)
+                        
         else:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
                     pygame.quit()
                     exit()
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    if event.button == 1 and turn == playerID:
+                        mousePos = cam.get_world_coord(pygame.mouse.get_pos())
+                        gridPos = (40, -265)
+                        relX = mousePos[0] - gridPos[0]
+                        relY = mousePos[1] - gridPos[1]
+                        if 0 <= relX < GRID_SIZE and 0 <= relY < GRID_SIZE:
+                            shotPos = (int(relX // SCALE), int(relY // SCALE))
+                            network.send(f"play:{shotPos[0]}:{shotPos[1]}")                
+
+            getUpdate = network.send("get:update")
+            if getUpdate == "True":
+                game = Game(network.send("get:game"))
+                turn = game.turn
+            if enemyShips is None or len(enemyShips) == 0:
+                enemyShips = network.pickle_receive("get:ships")[(playerID + 1) % 2]
+
+            draw_player_board(cam, playerSurface, playerShips, heldShip, game.boards[playerID])
             
-            draw_player_board(cam, playerSurface, playerShips, heldShip)
+            draw_opponent_board(cam, opponentSurface, (40, -265), enemyShips, game.boards[(playerID + 1) % 2], turn == playerID)
 
         pygame.display.update()

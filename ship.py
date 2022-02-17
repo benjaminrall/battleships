@@ -1,12 +1,12 @@
 class Ship:
 
-    sizes = {
-        0:[(0, 3),(3, 0)],  # battleship
-        1:[(0, 4),(4, 0)],  # carrier
-        2:[(0, 2),(2, 0)],  # cruiser
-        3:[(0, 1),(1, 0)],  # destroyer
-        4:[(0, 2),(2, 0)]   # submarine
-    }
+    sizes = [
+        [(0, 3),(3, 0)],  # battleship
+        [(0, 4),(4, 0)],  # carrier
+        [(0, 2),(2, 0)],  # cruiser
+        [(0, 1),(1, 0)],  # destroyer
+        [(0, 2),(2, 0)]   # submarine
+    ]
 
     def __init__(self, t, pos=(-1, -1), inTray=True):
         self.state = -1
