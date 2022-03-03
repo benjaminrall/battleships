@@ -15,7 +15,7 @@ FRAMERATE = 120
 GRID_SIZE = 400
 SCALE = GRID_SIZE // 10
 ICON_IMG = pygame.image.load(os.path.join("imgs", "icon.png"))
-DEFAULT_IP = "192.168.1.124"
+DEFAULT_IP = "172.16.2.172"
 COLOURS = [None, (255, 0, 0), (200, 200, 200)]
 
 # Pygame Setup
@@ -43,6 +43,7 @@ ready = False
 enemyReady = False
 playing = False
 game = None
+won = None
 turn = -1
 
 # Methods
@@ -63,9 +64,10 @@ def draw_hits(surface, board):
 def draw_sunken_ships(surface, ships, board):
     for ship in ships:
         sunk = True
-        for position in ship.get_positions():
-            if board[position[1]][position[0]] == 0:
-                sunk = False
+        if not ship.sunk:
+            for position in ship.get_positions():
+                if board[position[1]][position[0]] == 0:
+                    sunk = False
         if sunk:
             (start, end) = ship.get_bounds()
             shift = SCALE // 2
@@ -73,6 +75,7 @@ def draw_sunken_ships(surface, ships, board):
                 surface, COLOURS[1], ((start[0] * SCALE) + shift, (start[1] * SCALE) + shift), 
                 ((end[0] * SCALE) + shift, (end[1] * SCALE) + shift), shift + (1 if shift % 2 == 0 else 0)
             )
+            ship.sunk = True
 
 def draw_player_board(cam, surface, ships, heldShip, board = None):
     draw_board(surface)
@@ -150,15 +153,27 @@ def readyButton():
         network.send("unready")
     ready = not ready
 
+def resetButton():
+    global won
+    won = None
+    lobbyMenu.find_element("readyButton").set_enabled(True)
+    resetMenu.set_visible(False)
+
+def quitButton():
+    global running
+    running = False
+    pygame.quit()
+    exit()
+
 # Canvas
 connectMenu = Canvas(WIN_WIDTH, WIN_HEIGHT)
 connectMenu.add_element(Button("connectButton", (340, 500), (120, 50), Text("connectButtonText", (0, 0), "georgia", 24, "Connect"), (200, 200, 200), (150, 150, 150), (100, 100, 100), onClick=connect))
 connectMenu.add_element(TextBox("ipTextBox", (60, 500), (240, 50), Text("ipTextBoxText", (0, 0), "georgia", 24), DEFAULT_IP, (0, 0, 0), (250, 250, 250), "Enter IP...", (150, 150, 150), (0, 0, 0), 1, (230, 230, 230), (210, 210, 210), onEnter=connect))
-connectMenu.add_element(Text("connectionErrorMessage", (60, 555), "georgia", 14, "", (255, 0, 0)))
+connectMenu.add_element(Text("connectionErrorMessage", (60, 560), "georgia", 14, "", (255, 0, 0)))
 connectMenu.set_visible(False)
 
 waitingMenu = Canvas(WIN_WIDTH, WIN_HEIGHT)
-waitingMenu.add_element(Text("waitingText", (120, 500), "georgia", 30, "Waiting for players...", (255, 255, 255)))
+waitingMenu.add_element(Text("waitingText", (260, 500), "georgia", 30, "Waiting for players...", (255, 255, 255), "centre"))
 waitingMenu.set_visible(False)
 
 lobbyMenu = Canvas(WIN_WIDTH, WIN_HEIGHT)
@@ -166,6 +181,12 @@ lobbyMenu.add_element(Button("readyButton", (100, 500), (160, 50), Text("readyBu
 lobbyMenu.add_element(Image("ready0", (300, 500), "imgs/not_ready.png"))
 lobbyMenu.add_element(Image("ready1", (360, 500), "imgs/not_ready.png"))
 lobbyMenu.set_visible(False)
+
+resetMenu = Canvas(WIN_WIDTH, WIN_HEIGHT)
+resetMenu.add_element(Fill("fade", (0, 0, 0), 0.7))
+resetMenu.add_element(Text("winText", (500, 300), "georgia", 72, "You Win!", (255, 255, 255), "centre"))
+resetMenu.add_element(Button("resetButton", (400, 400), (200, 60), Text("resetButtonText", (0, 0), "georgia", 24, "Play Again"), (200, 200, 200), (150, 150, 150), (100, 100, 100), onClick=resetButton))
+resetMenu.set_visible(False)
 
 for i, ship in enumerate(tray.ships[:-1]):
     ship.root = (i, 0)
@@ -196,13 +217,15 @@ if __name__ == '__main__':
                     connectMenu.run_method_on_type(Button, "hover", [screenMousePos])
                     connectMenu.run_method_on_type(TextBox, "hover", [screenMousePos])
                     lobbyMenu.run_method_on_type(Button, "hover", [screenMousePos])
+                    resetMenu.run_method_on_type(Button, "hover", [screenMousePos])
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     if event.button == 1:
                         screenMousePos = pygame.mouse.get_pos()
                         connectMenu.run_method_on_type(Button, "click", [screenMousePos])
                         connectMenu.run_method_on_type(TextBox, "click", [screenMousePos])
                         lobbyMenu.run_method_on_type(Button, "click", [screenMousePos])
-                        if not ready:
+                        resetMenu.run_method_on_type(Button, "click", [screenMousePos])
+                        if not ready and won is None:
                             mousePos = cam.get_world_coord(screenMousePos)
                             gridPos = (-440, -265)
                             relX = mousePos[0] - gridPos[0]
@@ -225,6 +248,7 @@ if __name__ == '__main__':
                         screenMousePos = pygame.mouse.get_pos()
                         connectMenu.run_method_on_type(Button, "hover", [screenMousePos])
                         lobbyMenu.run_method_on_type(Button, "hover", [screenMousePos])
+                        resetMenu.run_method_on_type(Button, "hover", [screenMousePos])
                         if heldShip is not None:
                             validDrop = False
                             mousePos = cam.get_world_coord(screenMousePos)
@@ -269,6 +293,7 @@ if __name__ == '__main__':
 
                     draw_board(opponentSurface)
                     cam.blit(opponentSurface, (40, -265))
+                    resetMenu.update(cam)
 
                     if playerData[1] == "False":
                         if enemyReady:
@@ -289,11 +314,12 @@ if __name__ == '__main__':
                     game = Game(game)
                     turn = int(network.send("get:turn"))
                     if playerData[2] == "True" and not (ready and enemyReady):
-                        print("Getting ships.")
                         (playerShips, enemyShips) = network.pickle_receive("get:ships")
                     else:
                         network.send("pickle")
                         network.pickle_send(playerShips)
+                    ready = True
+            
                         
         else:
             for event in pygame.event.get():
@@ -309,7 +335,10 @@ if __name__ == '__main__':
                         relY = mousePos[1] - gridPos[1]
                         if 0 <= relX < GRID_SIZE and 0 <= relY < GRID_SIZE:
                             shotPos = (int(relX // SCALE), int(relY // SCALE))
-                            network.send(f"play:{shotPos[0]}:{shotPos[1]}")                
+                            network.send(f"play:{shotPos[0]}:{shotPos[1]}")
+
+            if not False in [ship.sunk for ship in playerShips]:
+                network.send(f"end:{(playerID + 1) % 2}")
 
             getUpdate = network.send("get:update")
             if getUpdate == "True":
@@ -321,5 +350,17 @@ if __name__ == '__main__':
             draw_player_board(cam, playerSurface, playerShips, heldShip, game.boards[playerID])
             
             draw_opponent_board(cam, opponentSurface, (40, -265), enemyShips, game.boards[(playerID + 1) % 2], turn == playerID)
+
+            if game.winner >= 0:
+                playing = False
+                readyButton()
+                won = game.winner == playerID
+                resetMenu.find_element("winText").render("You Win!" if won else "You Lose!")
+                resetMenu.set_visible(True)
+                lobbyMenu.find_element("readyButton").set_enabled(False)
+                for ship in playerShips:
+                    ship.sunk = False
+                enemyShips = None
+                network.send("reset")
 
         pygame.display.update()

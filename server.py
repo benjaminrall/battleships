@@ -20,11 +20,12 @@ connected = set()
 players = [0, 0]
 ready = [False, False]
 updates = [False, False]
+resets = [False, False]
 ships = [None, None]
 game = None
 
 def threaded_client(conn, p):
-    global players, ready, updates, ships, game
+    global players, ready, updates, resets, ships, game
     conn.send(str.encode(str(p)))
     pickled = False
     reply = ""
@@ -46,7 +47,7 @@ def threaded_client(conn, p):
                     pickled = False
                 elif data[0] == "get":
                     if data[1] == "players":
-                        reply = f"{not 0 in players}:{ready[(p + 1) % 2]}:{game is not None}"
+                        reply = f"{not 0 in players}:{ready[(p + 1) % 2]}:{game is not None and game.winner < 0}"
                     elif data[1] == "game":
                         reply = str(game)
                     elif data[1] == "turn":
@@ -76,6 +77,17 @@ def threaded_client(conn, p):
                 elif data[0] == "start":
                     if game is None:
                         game = Game()
+                elif data[0] == "end":
+                    game.winner = int(data[1])
+                    updates = [True, True]
+                elif data[0] == "reset":
+                    resets[p] = True
+                    if not False in resets:
+                        ready = [False, False]
+                        updates = [False, False]
+                        resets = [False, False]
+                        ships = [None, None]
+                        game = None
                 elif data[0] == "pickle":
                     pickled = True
                 if pickledReply is None:

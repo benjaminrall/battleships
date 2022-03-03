@@ -14,6 +14,7 @@ class Ship:
         self.type = t
         self.orientation = 0
         self.inTray = inTray
+        self.sunk = False
 
     def get_bounds(self, root = None):
         if root is None:
