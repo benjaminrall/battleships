@@ -15,7 +15,7 @@ FRAMERATE = 120
 GRID_SIZE = 400
 SCALE = GRID_SIZE // 10
 ICON_IMG = pygame.image.load(os.path.join("imgs", "icon.png"))
-DEFAULT_IP = "172.16.2.172"
+DEFAULT_IP = ""
 COLOURS = [None, (255, 0, 0), (200, 200, 200)]
 
 # Pygame Setup
@@ -188,11 +188,6 @@ resetMenu.add_element(Text("winText", (500, 300), "georgia", 72, "You Win!", (25
 resetMenu.add_element(Button("resetButton", (400, 400), (200, 60), Text("resetButtonText", (0, 0), "georgia", 24, "Play Again"), (200, 200, 200), (150, 150, 150), (100, 100, 100), onClick=resetButton))
 resetMenu.set_visible(False)
 
-for i, ship in enumerate(tray.ships[:-1]):
-    ship.root = (i, 0)
-    playerShips.append(ship)
-    ship.inTray = False
-tray.ships = tray.ships[-1:]
 
 # Main Loop
 if __name__ == '__main__':
